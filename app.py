@@ -4,9 +4,11 @@ import pandas as pd
 import numpy as np
 from itertools import chain
 
+
+st.sidebar.image('super.jpg',caption='Superminds',use_column_width=True)
 db = pd.read_csv('db_updated.csv')
 
-st.write(db)
+# st.write(db)
 
 process = st.sidebar.multiselect('Select Process',['Sense', 'Remember','Decide','Create','Learn'])
 augmentation = st.sidebar.multiselect('Augmentation',['Connect','Curate','Collaborate','Compute'])
@@ -26,6 +28,7 @@ if process or augmentation or module or group or sector:
     dfhat.sort_values(by=cols,ascending=False,inplace=True)
     for row in dfhat.iterrows():
         with st.expander(row[1]['Who / What'] + ': '+row[1]['Use case']):
+            st.markdown(', '.join([key+ ':'+ dict({1:'+',2:'++'})[int(value)] for key,value in dict(row[1][cols]).items() if value != np.nan]))
             st.write(row[1]['Description'])
-            
+
             

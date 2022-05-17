@@ -23,7 +23,6 @@ def get_img_with_href(local_img_path, target_url):
             <img src="data:image/{img_format};base64,{bin_str}" />
         </a>'''
     return html_code
-st.header("Welcome to Supermind desgin's collective intelligence Knowledge Graph")
 gif_html = get_img_with_href('super.jpg', 'https://www.supermind.design/')
 st.sidebar.markdown(gif_html, unsafe_allow_html=True)
 

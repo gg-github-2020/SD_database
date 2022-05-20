@@ -26,14 +26,16 @@ def get_img_with_href(local_img_path, target_url):
 gif_html = get_img_with_href('super.jpg', 'https://www.supermind.design/')
 st.sidebar.markdown(f'<div style="text-align: center"> {gif_html} </div>', unsafe_allow_html=True)
 
+st.sidebar.write("#")
+
 # st.sidebar.image('super.jpg',caption='Supermind Design',use_column_width=True)
 db = pd.read_csv('db_updated1.csv')
 st.header('Supermind.design database output:')
 # st.write(db)
 
 process = st.sidebar.multiselect('Process',['Sense', 'Remember','Decide','Create','Learn'])
-augmentation = st.sidebar.multiselect('Augmentation',['Connect','Curate','Collaborate','Compute'])
-module = st.sidebar.multiselect('Module',['Illuminate network',	'Incentivize',	'Feed',	'Collaborate_M'])
+augmentation = st.sidebar.multiselect('Augmentation',['Connect','Curate','Collaborate(AI)','Compute'])
+module = st.sidebar.multiselect('Module',['Illuminate network',	'Incentivize',	'Feed',	'Collaborate(Module)'])
 group = st.sidebar.multiselect('Group',['Community',	'Market',	'Ecosystem',	'Democracy'])
 sector = st.sidebar.multiselect('Specific Sector',['Consumer / retail',	'Healthcare',	'Public sector, NGO',	
             'Manufacturing hardw., Infra',	'High Tech (software)',	'Financial services',	'Professional services',	
@@ -54,11 +56,12 @@ if process or augmentation or module or group or sector:
             with st.expander(row[1]['Who / What'] + ': '+row[1]['Use case']):
                 st.markdown(', '.join([key+ ':'+ dict({1:'+',2:'++'})[int(value)] for key,value in dict(row[1][cols]).items() if value != np.nan]))
                 st.write(row[1]['Description'])
-
-    dfhat.to_csv('db_download.csv')
+    dfhat.drop(columns=['Unnamed: 0'],inplace=True)
+    dfhat.to_csv('db_download.csv', index=False)
     with open('db_download.csv', 'rb') as f:
         st.sidebar.download_button('Download filtered Data', f, file_name='db_download.csv')
-# st.sidebar.download_link(dfhat.to_csv('db_download.csv'))
+    st.sidebar.write('Copyright © Supermind.design Creative Commons (share, adapt, credit) license')
+    # st.sidebar.download_link(dfhat.to_csv('db_download.csv'))
 
 
 

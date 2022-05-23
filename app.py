@@ -50,6 +50,7 @@ if process or augmentation or module or group or sector:
         st.write('No data found')
     else:
         for p in cols:
+            dfhat[p] = dfhat[p].apply(lambda x: float(str(x).split('"')[0]))
             dfhat = dfhat[dfhat[p].isin([1,2])]
         dfhat.sort_values(by=cols,ascending=False,inplace=True)
         for row in dfhat.iterrows():

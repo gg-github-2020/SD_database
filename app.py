@@ -3,7 +3,7 @@ from lib2to3.pgen2.token import NEWLINE
 import streamlit as st  
 import pandas as pd
 import numpy as np
-from itertools import chain
+import re
 
 import os
 import base64
@@ -29,7 +29,24 @@ st.sidebar.markdown(f'<div style="text-align: center"> {gif_html} </div>', unsaf
 st.sidebar.write("#")
 
 # st.sidebar.image('super.jpg',caption='Supermind Design',use_column_width=True)
-db = pd.read_csv('data (3).csv')
+@st.cache(allow_output_mutation=True)
+def clean_data():
+    sheet_url = "https://docs.google.com/spreadsheets/d/1RviBVCNh5FaYaNjoMAgCncRBHBFtfyt6XXaKO4f4Wek/edit?usp=sharing"
+    url_1 = sheet_url.replace('/edit?usp=sharing', '/export?format=csv&gid=0')
+    df = pd.read_csv(url_1, header=[1])
+    def apply_func(x):
+        if re.search(r"\+{2}", str(x)) or re.search(r"\*{2}", str(x)):
+            return 2
+        elif re.search(r"^[^\+]*\+[^\+]*$", str(x)) or re.search(r"^[^\+]*\+[^\+]*$", str(x)):
+            return 1
+        else:
+            return np.nan
+    for col in df.columns:
+        if col not in ['Who / What', 'Use case', 'Description']:
+            df[col] = df[col].apply(apply_func)
+    return df
+
+db = clean_data()
 st.header('Supermind.design database output:')
 # st.write(db)
 

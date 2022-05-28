@@ -39,7 +39,7 @@ group = st.sidebar.multiselect('Group',['Community',	'Market',	'Ecosystem',	'Dem
 augmentation = st.sidebar.multiselect('Augmentation',['Connect','Curate','Collaborate ','Compute'])
 sector = st.sidebar.multiselect('Specific Sector',['Consumer / retail',	'Healthcare',	'Public sector, NGO',	
             'Manufacturing hardw., Infra',	'High Tech (software)',	'Financial services',	'Professional services',	
-            'Media, telco, entertainment',	'Agriculture',	'Energy, nat. resources',	'Education and academia',	'Supply chain, real estate'])
+            'Media, telco, entertainment, hospitality',	'Agriculture',	'Energy, nat. resources',	'Education and academia',	'Supply chain, real estate'])
 
 if process or augmentation or module or group or sector:
     #filter by selection in sidebar consider only those rows which have 1,2 values in all columns

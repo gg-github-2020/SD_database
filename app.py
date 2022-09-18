@@ -108,7 +108,7 @@ if button == 'Graph(Beta)':
 
     nodeColor = st.color_picker('Pick A Color for Nodes', '#00f900')
 
-    edgeColor = st.color_picker('Pick A Color for Edges', '#000000')
+    edgeColor = st.color_picker('Pick A Color for Edges', '#C9B1B1')
 
     NodeSize = st.slider('Select multiplier for node size', min_value=1, max_value=20, value=10, step=1)
 

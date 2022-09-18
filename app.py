@@ -66,20 +66,15 @@ sector = st.sidebar.multiselect('Specific Sector',['Consumer / retail',	'Healthc
             'Manufacturing hardw., Infra',	'High Tech (software)',	'Financial services',	'Professional services',	
             'Media, telco, entertainment, hospitality',	'Agriculture',	'Energy, nat. resources',	'Education and academia',	'Supply chain, real estate'])
 flagg = False
+flagg2 = False
+if button2:
+    flagg2 = True
 if button:
     flagg = True
 
 cols = process + augmentation +module+ group + sector
 # @st.cache(allow_output_mutation=True)
-val = st.slider('Select multiplier for edge length', min_value=100, max_value=600, value=150, step=10)
 
-nodeColor = st.color_picker('Pick A Color for Nodes', '#00f900')
-
-edgeColor = st.color_picker('Pick A Color for Edges', '#000000')
-
-NodeSize = st.slider('Select multiplier for node size', min_value=1, max_value=20, value=10, step=1)
-
-canvasLength = st.slider('Select multiplier for canvas length', min_value=500, max_value=2000, value=1000, step=10)
 def get_graph(db):
     
     nodes = []
@@ -104,7 +99,7 @@ def get_graph(db):
             # st.write(db.iloc[i]['Who / What'])
             ls.append(sr)
             nodes.append(Node(id= sr, label= sr, size= sc*NodeSize, color= nodeColor))
-    mx = dbnew['score'].max()
+    mx = dbnew['score'].max() + 2
     for i in range(len(dbnew)):
         for j in range(i+1, len(dbnew)):
             edges.append(Edge(source=dbnew.iloc[i]['Who / What'], target=dbnew.iloc[j]['Who / What'], length=(2*mx - dbnew.iloc[i]['score'] - dbnew.iloc[j]['score'])*val, color=edgeColor, type="CURVE_SMOOTH"))
@@ -113,8 +108,16 @@ def get_graph(db):
     return {'nodes':nodes, 'edges':edges, 'config':config}
     
   
-if flagg or not button2:
-    topic = st.multiselect('Topic', db['Who / What'].unique())
+if flagg and not button2:
+    val = st.slider('Select multiplier for edge length', min_value=100, max_value=600, value=150, step=10)
+
+    nodeColor = st.color_picker('Pick A Color for Nodes', '#00f900')
+
+    edgeColor = st.color_picker('Pick A Color for Edges', '#000000')
+
+    NodeSize = st.slider('Select multiplier for node size', min_value=1, max_value=20, value=10, step=1)
+
+    canvasLength = st.slider('Select multiplier for canvas length', min_value=500, max_value=2000, value=1000, step=10)
     
     
     dic = get_graph(db)

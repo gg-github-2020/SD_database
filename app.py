@@ -54,9 +54,9 @@ st.header('Supermind.design database output:')
 # st.write(db)
 
 col1, col2 = st.sidebar.columns(2)
-button = col1.button('Graph (Beta)')
-
-button2 = col2.button('View Table')
+# button = col1.button('Graph (Beta)')
+button = st.sidebar.radio('Select a View:', [ 'Graph(Beta)', 'Table'], index=1)
+# button2 = col2.button('View Table')
 
 process = st.sidebar.multiselect('Process',['Sense', 'Remember','Decide','Create','Learn'])
 module = st.sidebar.multiselect('Module',['Illuminate network',	'Incentivize',	'Feed',	'Collaborate'])
@@ -65,12 +65,7 @@ augmentation = st.sidebar.multiselect('Augmentation',['Connect','Curate','Collab
 sector = st.sidebar.multiselect('Specific Sector',['Consumer / retail',	'Healthcare',	'Public sector, NGO',	
             'Manufacturing hardw., Infra',	'High Tech (software)',	'Financial services',	'Professional services',	
             'Media, telco, entertainment, hospitality',	'Agriculture',	'Energy, nat. resources',	'Education and academia',	'Supply chain, real estate'])
-flagg = False
-flagg2 = False
-if button2:
-    flagg2 = True
-if button:
-    flagg = True
+
 
 cols = process + augmentation +module+ group + sector
 # @st.cache(allow_output_mutation=True)
@@ -108,7 +103,7 @@ def get_graph(db):
     return {'nodes':nodes, 'edges':edges, 'config':config}
     
   
-if flagg and not button2:
+if button == 'Graph(Beta)':
     val = st.slider('Select multiplier for edge length', min_value=100, max_value=600, value=150, step=10)
 
     nodeColor = st.color_picker('Pick A Color for Nodes', '#00f900')

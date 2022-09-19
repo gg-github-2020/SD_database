@@ -68,8 +68,8 @@ sector = st.sidebar.multiselect('Specific Sector',['Consumer / retail',	'Healthc
 
 
 cols = process + augmentation +module+ group + sector
-# @st.cache(allow_output_mutation=True)
 
+@st.cache(allow_output_mutation=True)
 def get_graph(db):
     
     nodes = []
@@ -84,7 +84,7 @@ def get_graph(db):
     dbnew = dbnew[['Who / What', 'Use case', 'Description', 'score']][dbnew['score'] > 0]
     dbnew = dbnew.sort_values(by=['score', 'Who / What'], ascending=False)
     # dbnew = dbnew.groupby(['Who / What']).sum().reset_index()
-    dbnew = dbnew[:len(dbnew)//6]
+    dbnew = dbnew[:len(dbnew)//8]
     # st.write(dbnew)
     ls = []
     for i in range(len(dbnew)):
@@ -93,11 +93,12 @@ def get_graph(db):
         if sr not in ls:
             # st.write(db.iloc[i]['Who / What'])
             ls.append(sr)
-            nodes.append(Node(id= sr, label= sr, size= sc*NodeSize, color= nodeColor))
+            nodes.append(Node(id=sr, label= sr, size= sc*NodeSize, color= nodeColor))
     mx = dbnew['score'].max() + 2
     for i in range(len(dbnew)):
         for j in range(i+1, len(dbnew)):
-            edges.append(Edge(source=dbnew.iloc[i]['Who / What'], target=dbnew.iloc[j]['Who / What'], length=(2*mx - dbnew.iloc[i]['score'] - dbnew.iloc[j]['score'])*val, color=edgeColor, type="CURVE_SMOOTH"))
+            if abs(dbnew.iloc[i]['score'] - dbnew.iloc[j]['score']) < 1:
+                edges.append(Edge(source=dbnew.iloc[i]['Who / What'], target=dbnew.iloc[j]['Who / What'], length=(2*mx - dbnew.iloc[i]['score'] - dbnew.iloc[j]['score'])*val, color=edgeColor, type="CURVE_SMOOTH"))
     
     config = Config(width=1000, height=800, directed=False, collapsible=False, nodeHighlightBehavior=True, highlightColor="#F7A7A6", highlightFontSize=12, highlightFontWeight="bold", node={'labelProperty': 'label', 'color': nodeColor, 'size': NodeSize, 'highlightStrokeColor': "SAME"}, link={'highlightColor': edgeColor})
     return {'nodes':nodes, 'edges':edges, 'config':config}

@@ -75,6 +75,11 @@ def get_graph(db):
     nodes = []
     edges = []
     dbnew = db[db[cols].notnull().any(axis=1)]
+    # only select rows where there is no null in cols
+    for col in cols:
+        dbnew = dbnew[dbnew[col].notnull()]
+    
+    # dbnew = dbnew[dbnew[cols].notnull().any(axis=1)]
     dbnew1 = dbnew[cols].sum(axis=1)
     # dbnew['topics'] = [dict() for i in range(len(dbnew))]
     # for i in range(len(dbnew)):
@@ -84,7 +89,8 @@ def get_graph(db):
     dbnew = dbnew[['Who / What', 'Use case', 'Description', 'score']][dbnew['score'] > 0]
     dbnew = dbnew.sort_values(by=['score', 'Who / What'], ascending=False)
     # dbnew = dbnew.groupby(['Who / What']).sum().reset_index()
-    dbnew = dbnew[:len(dbnew)//8]
+    check = 50 if len(dbnew)//8 > 50 else len(dbnew)
+    dbnew = dbnew[:check]
     # st.write(dbnew)
     ls = []
     for i in range(len(dbnew)):
@@ -93,28 +99,30 @@ def get_graph(db):
         if sr not in ls:
             # st.write(db.iloc[i]['Who / What'])
             ls.append(sr)
-            nodes.append(Node(id=sr, label= sr, size= sc*NodeSize, color= nodeColor))
+            nodes.append(Node(id=sr, label= sr, size= 30, color= nodeColor))
     mx = dbnew['score'].max() + 2
     for i in range(len(dbnew)):
         for j in range(i+1, len(dbnew)):
             if abs(dbnew.iloc[i]['score'] - dbnew.iloc[j]['score']) < 1:
-                edges.append(Edge(source=dbnew.iloc[i]['Who / What'], target=dbnew.iloc[j]['Who / What'], length=(2*mx - dbnew.iloc[i]['score'] - dbnew.iloc[j]['score'])*val, color=edgeColor, type="CURVE_SMOOTH"))
+                edges.append(Edge(source=dbnew.iloc[i]['Who / What'], target=dbnew.iloc[j]['Who / What'], length=(2*mx - dbnew.iloc[i]['score'] - dbnew.iloc[j]['score'])*150, color=edgeColor, type="CURVE_SMOOTH"))
     
-    config = Config(width=1000, height=800, directed=False, collapsible=False, nodeHighlightBehavior=True, highlightColor="#F7A7A6", highlightFontSize=12, highlightFontWeight="bold", node={'labelProperty': 'label', 'color': nodeColor, 'size': NodeSize, 'highlightStrokeColor': "SAME"}, link={'highlightColor': edgeColor})
+    config = Config(width=1000, height=800, directed=False, collapsible=False,  nodeHighlightBehavior=True, highlightColor="#F7A7A6", highlightFontSize=20, highlightFontWeight="bold", node={'labelProperty': 'label', 'color': nodeColor, 'size': 30, 'highlightStrokeColor': "SAME"}, link={'highlightColor': edgeColor})
     return {'nodes':nodes, 'edges':edges, 'config':config}
     
   
 if button == 'Graph(Beta)':
-    val = st.slider('Select multiplier for edge length', min_value=100, max_value=600, value=150, step=10)
+    # val = st.slider('Select multiplier for edge length', min_value=100, max_value=600, value=150, step=10)
 
-    nodeColor = st.color_picker('Pick A Color for Nodes', '#00f900')
+    # nodeColor = st.color_picker('Pick A Color for Nodes', '#fff333')
 
-    edgeColor = st.color_picker('Pick A Color for Edges', '#C9B1B1')
+    # edgeColor = st.color_picker('Pick A Color for Edges', '#9999CC')
 
-    NodeSize = st.slider('Select multiplier for node size', min_value=1, max_value=20, value=10, step=1)
+    # NodeSize = st.slider('Select multiplier for node size', min_value=1, max_value=20, value=10, step=1)
 
-    canvasLength = st.slider('Select multiplier for canvas length', min_value=500, max_value=2000, value=1000, step=10)
+    # canvasLength = st.slider('Select multiplier for canvas length', min_value=500, max_value=2000, value=1000, step=10)
     
+    nodeColor= '#fff333'
+    edgeColor= '#9999CC'
     
     dic = get_graph(db)
     

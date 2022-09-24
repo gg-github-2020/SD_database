@@ -10,7 +10,6 @@ import base64
 
 from streamlit_agraph import agraph, Node, Edge, Config
 st.set_page_config(layout="wide", page_title="SuperMind Design")
-st.set_page_config(, page_icon="")
 
 @st.cache(allow_output_mutation=True)
 def get_base64_of_bin_file(bin_file):

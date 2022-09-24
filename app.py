@@ -55,7 +55,7 @@ st.header('Supermind.design database output:')
 
 col1, col2 = st.sidebar.columns(2)
 # button = col1.button('Graph (Beta)')
-button = st.sidebar.radio('Select a View:', [ 'Graph(Beta)', 'Table'], index=1)
+button = st.sidebar.radio('Select a View:', ['Table','Graph'], index=0)
 # button2 = col2.button('View Table')
 
 process = st.sidebar.multiselect('Process',['Sense', 'Remember','Decide','Create','Learn'])
@@ -70,7 +70,7 @@ sector = st.sidebar.multiselect('Specific Sector',['Consumer / retail',	'Healthc
 cols = process + augmentation +module+ group + sector
 
 @st.cache(allow_output_mutation=True)
-def get_graph(db):
+def graph(db):
     
     nodes = []
     edges = []
@@ -110,7 +110,7 @@ def get_graph(db):
     return {'nodes':nodes, 'edges':edges, 'config':config}
     
   
-if button == 'Graph(Beta)':
+if button == 'Graph':
     # val = st.slider('Select multiplier for edge length', min_value=100, max_value=600, value=150, step=10)
 
     # nodeColor = st.color_picker('Pick A Color for Nodes', '#fff333')
@@ -124,7 +124,7 @@ if button == 'Graph(Beta)':
     nodeColor= '#fff333'
     edgeColor= '#9999CC'
     
-    dic = get_graph(db)
+    dic = graph(db)
     
     nodes, edges, config = dic['nodes'], dic['edges'], dic['config']
     # nodes = [node for node in nodes if node.id in  or node.id in [edge.to for edge in edges if edge.source in topic]]

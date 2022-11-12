@@ -99,7 +99,7 @@ def graph(db):
         if sr not in ls:
             # st.write(db.iloc[i]['Who / What'])
             ls.append(sr)
-            nodes.append(Node(id=sr, label= sr, size= 30, color= nodeColor))
+            nodes.append(Node(id=sr, label= sr, size= 15, color= nodeColor))
     mx = dbnew['score'].max() + 2
     for i in range(len(dbnew)):
         for j in range(i+1, len(dbnew)):

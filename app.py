@@ -53,6 +53,9 @@ db = clean_data()
 st.header('Supermind.design database output:')
 # st.write(db)
 
+db.columns = [re.sub(r"Collaborate ", r"Collaborate_", col).strip() for col in db.columns]
+print(db.columns)
+
 col1, col2 = st.sidebar.columns(2)
 # button = col1.button('Graph (Beta)')
 button = st.sidebar.radio('Select a View:', ['Table','Graph'], index=0)
@@ -67,7 +70,7 @@ sector = st.sidebar.multiselect('Specific Sector',['Consumer / retail',	'Healthc
             'Media, telco, entertainment, hospitality',	'Agriculture',	'Energy, nat. resources',	'Education and academia',	'Supply chain, real estate'])
 
 
-cols = process + augmentation +module+ group + sector
+cols = process + [w if w != 'Collaborate ' else 'Collaborate_' for w in augmentation ] +module+ group + sector
 
 @st.cache(allow_output_mutation=True)
 def graph(db):
@@ -145,6 +148,7 @@ else:
        
         # dfhat = db.iloc[np.where(db[np.where(~db[p].isna()) for p in process].contains([1,2])) & np.where(db[augmentation].contains([1,2])) & np.where(db[module].contains([1,2])) & np.where(db[group].contains([1,2])) & np.where(db[sector].contains([1,2]))]
         dfhat = db
+        st.write(list(dfhat.columns))
         if len(dfhat) == 0:
             st.write('No data found')
         else:

@@ -54,7 +54,6 @@ st.header('Supermind.design database output:')
 # st.write(db)
 
 db.columns = [re.sub(r"Collaborate ", r"Collaborate_", col).strip() for col in db.columns]
-print(db.columns)
 
 col1, col2 = st.sidebar.columns(2)
 # button = col1.button('Graph (Beta)')

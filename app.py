@@ -147,7 +147,6 @@ else:
        
         # dfhat = db.iloc[np.where(db[np.where(~db[p].isna()) for p in process].contains([1,2])) & np.where(db[augmentation].contains([1,2])) & np.where(db[module].contains([1,2])) & np.where(db[group].contains([1,2])) & np.where(db[sector].contains([1,2]))]
         dfhat = db
-        st.write(list(dfhat.columns))
         if len(dfhat) == 0:
             st.write('No data found')
         else:

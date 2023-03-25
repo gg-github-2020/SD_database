@@ -1,12 +1,11 @@
-from ctypes import alignment
-from lib2to3.pgen2.token import NEWLINE
 import streamlit as st  
 import pandas as pd
 import numpy as np
 import re
-
 import os
 import base64
+import pickle
+from rank_bm25 import BM25Okapi
 
 from streamlit_agraph import agraph, Node, Edge, Config
 st.set_page_config(layout="wide", page_title="SuperMind Design")
@@ -17,17 +16,10 @@ def get_base64_of_bin_file(bin_file):
         data = f.read()
     return base64.b64encode(data).decode()
 
-# @st.cache(allow_output_mutation=True)
-# def get_img_with_href(local_img_path, target_url):
-#     img_format = os.path.splitext(local_img_path)[-1].replace('.', '')
-#     bin_str = get_base64_of_bin_file(local_img_path)
-#     html_code = f'''
-#         <a href="{target_url}">
-#             <img src="data:image/{img_format};base64,{bin_str}" />
-#         </a>'''
-#     return html_code
-# gif_html = get_img_with_href('super.jpg', 'https://www.supermind.design/')
-# st.sidebar.markdown(f'<div style="text-align: center"> {gif_html} </div>', unsafe_allow_html=True)
+names = ['Sense', 'Remember','Decide','Create','Learn','Illuminate network',	'Incentivize',	'Feed',	'Collaborate_','Community',	'Market',	'Ecosystem',	'Democracy','Connect','Curate','Collaborate_','Compute','Consumer / retail',	'Healthcare',	'Public sector, NGO',
+         'Manufacturing hardw., Infra',	'High Tech (software)',	'Financial services',	'Professional services',	
+            'Media, telco, entertainment, hospitality',	'Agriculture',	'Energy, nat. resources',	'Education and academia',	'Supply chain, real estate' ]
+
 
 st.sidebar.write("#")
 
@@ -47,19 +39,64 @@ def clean_data():
     for col in df.columns:
         if col not in ['Who / What', 'Use case', 'Description']:
             df[col] = df[col].apply(apply_func)
+    df.columns = [re.sub(r"Collaborate ", r"Collaborate_", col).strip() for col in df.columns]
+    df['Case'] = ''
+    #concatenate the column name to Who / What column where ++ or + is present
+    for col in names:
+        df['Case'] = df['Case'] + df[col].apply(lambda x: str(col) + ' ' if x in [1,2] else '')
+    df['text_details'] = df['Case'] + ' ' + df['Description'] + ' ' + df['Use case'] + ' ' + df['Who / What']
     return df
 
-db = clean_data()
+def get_data():
+    if not os.path.exists('data.csv'):
+        db = clean_data()
+        db.to_csv('data.csv', index=False)
+    db = pd.read_csv('data.csv')
+    if len(db) == len(pd.read_csv("https://docs.google.com/spreadsheets/d/1RviBVCNh5FaYaNjoMAgCncRBHBFtfyt6XXaKO4f4Wek/edit?usp=sharing".replace('/edit?usp=sharing', '/export?format=csv&gid=0'), header=[1])):
+        pass
+    else:
+        db = clean_data()
+        db.to_csv('data.csv', index=False)
+    db.columns = [re.sub(r"Collaborate ", r"Collaborate_", col).strip() for col in db.columns]
+    return db
+db = get_data()
 st.header('Supermind.design database output:')
 # st.write(db)
 
-db.columns = [re.sub(r"Collaborate ", r"Collaborate_", col).strip() for col in db.columns]
+def clean_text(text):
+    dfhat = pd.read_csv('data.csv')
+    dfhat['Case'] = ''
+    #concatenate the column name to Who / What column where ++ or + is present
+    for col in names:
+        dfhat['Case'] = dfhat['Case'] + dfhat[col].apply(lambda x: str(col) + ' ' if x in [1,2] else '')
+    dfhat['text_details'] = dfhat['Case'] + ' ' + dfhat['Description'] + ' ' + dfhat['Use case'] + ' ' + dfhat['Who / What']
+    docs = dfhat['text_details']
+    docs = [doc.split(" ") for doc in docs]
+    bm25 = BM25Okapi(docs)
+    pickle.dump(bm25, open('bm25.pkl', 'wb'))
+    return bm25
+
+def get_docs_embeddings():
+    db = get_data()
+    db.to_csv('data.csv', index=False)
+    if len(db) == len(get_data()) and os.path.exists('doc_embeddings_dict.pkl'):
+        with open('bm25.pkl', 'rb') as f:
+            doc_embeddings_dict = pickle.load(f)
+    else:
+        doc_embeddings_dict = clean_text(db)
+    return doc_embeddings_dict
+
+def get_similar_docs(query,corpus, top_n=5):
+    doc_embeddings_dict = get_docs_embeddings()
+    tokenized_query = query.split(" ")
+    similar_items = doc_embeddings_dict.get_top_n(tokenized_query,corpus , n=top_n)
+    return similar_items  
 
 col1, col2 = st.sidebar.columns(2)
 # button = col1.button('Graph (Beta)')
 button = st.sidebar.radio('Select a View:', ['Table','Graph'], index=0)
 # button2 = col2.button('View Table')
-
+query = st.sidebar.text_input('Search', value='', key=None, type='default')
 process = st.sidebar.multiselect('Process',['Sense', 'Remember','Decide','Create','Learn'])
 module = st.sidebar.multiselect('Module',['Illuminate network',	'Incentivize',	'Feed',	'Collaborate'])
 group = st.sidebar.multiselect('Group',['Community',	'Market',	'Ecosystem',	'Democracy'])
@@ -71,9 +108,6 @@ sector = st.sidebar.multiselect('Specific Sector',['Consumer / retail',	'Healthc
 
 cols = process + [w if w != 'Collaborate ' else 'Collaborate_' for w in augmentation ] +module+ group + sector
 
-names = ['Sense', 'Remember','Decide','Create','Learn','Illuminate network',	'Incentivize',	'Feed',	'Collaborate_','Community',	'Market',	'Ecosystem',	'Democracy','Connect','Curate','Collaborate_','Compute','Consumer / retail',	'Healthcare',	'Public sector, NGO',
-         'Manufacturing hardw., Infra',	'High Tech (software)',	'Financial services',	'Professional services',	
-            'Media, telco, entertainment, hospitality',	'Agriculture',	'Energy, nat. resources',	'Education and academia',	'Supply chain, real estate' ]
 
 @st.cache(allow_output_mutation=True)
 def graph(db):
@@ -129,7 +163,9 @@ if button == 'Graph':
     
     nodeColor= '#fff333'
     edgeColor= '#9999CC'
-    
+    if query != '':
+        idxs = [np.where(db['text_details'] == doc)[0][0] for doc in get_similar_docs(query, list(db['text_details']), 5)]
+        db = db.loc[idxs, :]
     dic = graph(db)
     
     nodes, edges, config = dic['nodes'], dic['edges'], dic['config']
@@ -146,16 +182,11 @@ if button == 'Graph':
     
     
 else:
-    query = st.text_input('Search', value='', key=None, type='default')
+    
     dfhat = db
     if query != '':
-        dfhat['Case'] = ''
-        #concatenate the column name to Who / What column where ++ or + is present
-        for col in names:
-            dfhat['Case'] = dfhat['Case'] + dfhat[col].apply(lambda x: str(col) + ' ' if x in [1,2] else '')
-        dfhat = dfhat[dfhat['Who / What'].str.contains(query, case=False) | dfhat['Use case'].str.contains(query, case=False) | dfhat['Description'].str.contains(query, case=False) | dfhat['Case'].str.contains(query, case=False)]
-
-        #filter by selection in sidebar consider only those rows which have 1,2 values in all columns
+        idxs = [np.where(dfhat['text_details'] == doc)[0][0] for doc in get_similar_docs(query, list(dfhat['text_details']), 15)]
+        dfhat = dfhat.loc[idxs, :]
         
     # dfhat = db.iloc[np.where(db[np.where(~db[p].isna()) for p in process].contains([1,2])) & np.where(db[augmentation].contains([1,2])) & np.where(db[module].contains([1,2])) & np.where(db[group].contains([1,2])) & np.where(db[sector].contains([1,2]))]
     for p in cols:

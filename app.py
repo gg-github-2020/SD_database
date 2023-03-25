@@ -6,6 +6,12 @@ import os
 import base64
 import pickle
 from rank_bm25 import BM25Okapi
+import nltk
+from nltk.corpus import stopwords
+from nltk.stem import PorterStemmer
+
+nltk.download('stopwords')
+stop_words = set(stopwords.words('english'))
 
 from streamlit_agraph import agraph, Node, Edge, Config
 st.set_page_config(layout="wide", page_title="SuperMind Design")
@@ -22,6 +28,20 @@ names = ['Sense', 'Remember','Decide','Create','Learn','Illuminate network',	'In
 
 
 st.sidebar.write("#")
+
+def remove_stopwords(text):
+    word_tokens = text.split()
+    filtered_text = [word for word in word_tokens if word.lower() not in stop_words]
+    return ' '.join(filtered_text)
+
+
+
+stemmer = PorterStemmer()
+
+def stem_words(text):
+    word_tokens = text.split()
+    stemmed_text = [stemmer.stem(word) for word in word_tokens]
+    return ' '.join(stemmed_text)
 
 # st.sidebar.image('super.jpg',caption='Supermind Design',use_column_width=True)
 @st.cache(allow_output_mutation=True)
@@ -45,6 +65,7 @@ def clean_data():
     for col in names:
         df['Case'] = df['Case'] + df[col].apply(lambda x: str(col) + ' ' if x in [1,2] else '')
     df['text_details'] = df['Case'] + ' ' + df['Description'] + ' ' + df['Use case'] + ' ' + df['Who / What']
+    df['text_details'] = df['text_details'].apply(lambda x: stem_words(remove_stopwords(x.lower())))
     return df
 
 def get_data():
@@ -70,6 +91,7 @@ def clean_text(text):
     for col in names:
         dfhat['Case'] = dfhat['Case'] + dfhat[col].apply(lambda x: str(col) + ' ' if x in [1,2] else '')
     dfhat['text_details'] = dfhat['Case'] + ' ' + dfhat['Description'] + ' ' + dfhat['Use case'] + ' ' + dfhat['Who / What']
+    dfhat['text_details'] = dfhat['text_details'].apply(lambda x: stem_words(remove_stopwords(x.lower())))
     docs = dfhat['text_details']
     docs = [doc.split(" ") for doc in docs]
     bm25 = BM25Okapi(docs)
@@ -88,7 +110,7 @@ def get_docs_embeddings():
 
 def get_similar_docs(query,corpus, top_n=5):
     doc_embeddings_dict = get_docs_embeddings()
-    tokenized_query = query.split(" ")
+    tokenized_query = query.lower().split(" ")
     similar_items = doc_embeddings_dict.get_top_n(tokenized_query,corpus , n=top_n)
     return similar_items  
 
@@ -96,7 +118,7 @@ col1, col2 = st.sidebar.columns(2)
 # button = col1.button('Graph (Beta)')
 button = st.sidebar.radio('Select a View:', ['Table','Graph'], index=0)
 # button2 = col2.button('View Table')
-query = st.sidebar.text_input('Search', value='', key=None, type='default')
+query = st.sidebar.text_input('Search Related Ideas', value='', key=None, type='default')
 process = st.sidebar.multiselect('Process',['Sense', 'Remember','Decide','Create','Learn'])
 module = st.sidebar.multiselect('Module',['Illuminate network',	'Incentivize',	'Feed',	'Collaborate'])
 group = st.sidebar.multiselect('Group',['Community',	'Market',	'Ecosystem',	'Democracy'])
@@ -186,25 +208,27 @@ else:
     dfhat = db
     if query != '':
         idxs = [np.where(dfhat['text_details'] == doc)[0][0] for doc in get_similar_docs(query, list(dfhat['text_details']), 15)]
+        print(idxs)
         dfhat = dfhat.loc[idxs, :]
-        
+    if query != '' or len(cols) != 0:    
     # dfhat = db.iloc[np.where(db[np.where(~db[p].isna()) for p in process].contains([1,2])) & np.where(db[augmentation].contains([1,2])) & np.where(db[module].contains([1,2])) & np.where(db[group].contains([1,2])) & np.where(db[sector].contains([1,2]))]
-    for p in cols:
-        dfhat[p] = dfhat[p].apply(lambda x: float(str(x).split('"')[-1]))
-        dfhat = dfhat[dfhat[p].isin([1,2])]
-    dfhat.sort_values(by=cols,ascending=False,inplace=True)
-    if len(dfhat) == 0:
-            st.write('No data found')
-    for row in dfhat.iterrows():
-        with st.expander(row[1]['Who / What'] + ': ' + row[1]['Use case']):
-            st.markdown(', '.join([key+ ':'+ dict({1:'+',2:'++'})[int(value)] for key,value in dict(row[1][cols]).items() if value != np.nan]))
-            st.write(row[1]['Description'])
-        # dfhat.drop(columns=['Unnamed: 0'],inplace=True)
-    dfhat.to_csv('db_download.csv', index=False)
-    with open('db_download.csv', 'rb') as f:
-        st.sidebar.download_button('Download filtered Data', f, file_name='db_download.csv', key=None, mime='text/csv')
-    st.sidebar.write('Copyright © Supermind.design Creative Commons (share, adapt, credit) license')
-        # st.sidebar.download_link(dfhat.to_csv('db_download.csv'))
+        for p in cols:
+            dfhat[p] = dfhat[p].apply(lambda x: float(str(x).split('"')[-1]))
+            dfhat = dfhat[dfhat[p].isin([1,2])]
+        if query == '':
+            dfhat.sort_values(by=cols,ascending=False,inplace=True)
+        if len(dfhat) == 0:
+                st.write('No data found')
+        for row in dfhat.iterrows():
+            with st.expander(row[1]['Who / What'] + ': ' + row[1]['Use case']):
+                st.markdown(', '.join([key+ ':'+ dict({1:'+',2:'++'})[int(value)] for key,value in dict(row[1][cols]).items() if value != np.nan]))
+                st.write(row[1]['Description'])
+            # dfhat.drop(columns=['Unnamed: 0'],inplace=True)
+        dfhat.to_csv('db_download.csv', index=False)
+        with open('db_download.csv', 'rb') as f:
+            st.sidebar.download_button('Download filtered Data', f, file_name='db_download.csv', key=None, mime='text/csv')
+        st.sidebar.write('Copyright © Supermind.design Creative Commons (share, adapt, credit) license')
+            # st.sidebar.download_link(dfhat.to_csv('db_download.csv'))
 
 
 

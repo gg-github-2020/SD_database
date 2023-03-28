@@ -4,14 +4,13 @@ import numpy as np
 import re
 import os
 import base64
-import pickle
-from rank_bm25 import BM25Okapi
-import nltk
-from nltk.corpus import stopwords
-from nltk.stem import PorterStemmer
+from openai.embeddings_utils import get_embedding,cosine_similarity
+import openai
+import time 
+from ast import literal_eval
+openai.api_key = st.secrets["api_key"]
 
-nltk.download('stopwords')
-stop_words = set(stopwords.words('english'))
+
 
 from streamlit_agraph import agraph, Node, Edge, Config
 st.set_page_config(layout="wide", page_title="SuperMind Design")
@@ -29,19 +28,21 @@ names = ['Sense', 'Remember','Decide','Create','Learn','Illuminate network',	'In
 
 st.sidebar.write("#")
 
-def remove_stopwords(text):
-    word_tokens = text.split()
-    filtered_text = [word for word in word_tokens if word.lower() not in stop_words]
-    return ' '.join(filtered_text)
+# def remove_stopwords(text):
+#     word_tokens = text.split()
+#     filtered_text = [word for word in word_tokens if word.lower() not in stop_words]
+#     return ' '.join(filtered_text)
 
+embedding_model = "text-embedding-ada-002"
+embedding_encoding = "cl100k_base"  # this the encoding for text-embedding-ada-001
+max_tokens = 2000 # the maximum for text-embedding-ada-002 is 8191
 
+# stemmer = PorterStemmer()
 
-stemmer = PorterStemmer()
-
-def stem_words(text):
-    word_tokens = text.split()
-    stemmed_text = [stemmer.stem(word) for word in word_tokens]
-    return ' '.join(stemmed_text)
+# def stem_words(text):
+#     word_tokens = text.split()
+#     stemmed_text = [stemmer.stem(word) for word in word_tokens]
+#     return ' '.join(stemmed_text)
 
 # st.sidebar.image('super.jpg',caption='Supermind Design',use_column_width=True)
 @st.cache(allow_output_mutation=True)
@@ -65,7 +66,11 @@ def clean_data():
     for col in names:
         df['Case'] = df['Case'] + df[col].apply(lambda x: str(col) + ' ' if x in [1,2] else '')
     df['text_details'] = df['Case'] + ' ' + df['Description'] + ' ' + df['Use case'] + ' ' + df['Who / What']
-    df['text_details'] = df['text_details'].apply(lambda x: stem_words(remove_stopwords(x.lower())))
+    df['text_details'] = df['text_details'].apply(lambda x: x.lower())
+    def lmda(x):
+        time.sleep(2)
+        return get_embedding(x, engine=embedding_model)
+    df['embeddings'] = df['text_details'].apply(lmda)
     return df
 
 def get_data():
@@ -74,6 +79,7 @@ def get_data():
         db.to_csv('data.csv', index=False)
     db = pd.read_csv('data.csv')
     if len(db) == len(pd.read_csv("https://docs.google.com/spreadsheets/d/1RviBVCNh5FaYaNjoMAgCncRBHBFtfyt6XXaKO4f4Wek/edit?usp=sharing".replace('/edit?usp=sharing', '/export?format=csv&gid=0'), header=[1])):
+        print('No change in data')
         pass
     else:
         db = clean_data()
@@ -84,35 +90,14 @@ db = get_data()
 st.header('Supermind.design database output:')
 # st.write(db)
 
-def clean_text(text):
-    dfhat = pd.read_csv('data.csv')
-    dfhat['Case'] = ''
-    #concatenate the column name to Who / What column where ++ or + is present
-    for col in names:
-        dfhat['Case'] = dfhat['Case'] + dfhat[col].apply(lambda x: str(col) + ' ' if x in [1,2] else '')
-    dfhat['text_details'] = dfhat['Case'] + ' ' + dfhat['Description'] + ' ' + dfhat['Use case'] + ' ' + dfhat['Who / What']
-    dfhat['text_details'] = dfhat['text_details'].apply(lambda x: stem_words(remove_stopwords(x.lower())))
-    docs = dfhat['text_details']
-    docs = [doc.split(" ") for doc in docs]
-    bm25 = BM25Okapi(docs)
-    pickle.dump(bm25, open('bm25.pkl', 'wb'))
-    return bm25
 
-def get_docs_embeddings():
-    db = get_data()
-    db.to_csv('data.csv', index=False)
-    if len(db) == len(get_data()) and os.path.exists('doc_embeddings_dict.pkl'):
-        with open('bm25.pkl', 'rb') as f:
-            doc_embeddings_dict = pickle.load(f)
-    else:
-        doc_embeddings_dict = clean_text(db)
-    return doc_embeddings_dict
 
-def get_similar_docs(query,corpus, top_n=5):
-    doc_embeddings_dict = get_docs_embeddings()
-    tokenized_query = query.lower().split(" ")
-    similar_items = doc_embeddings_dict.get_top_n(tokenized_query,corpus , n=top_n)
-    return similar_items  
+
+def get_similar_docs(query,df, top_n=5):
+    query_embedding = get_embedding(query, engine=embedding_model )
+    df["similarity"] = df.embeddings.apply(lambda x: cosine_similarity(literal_eval(x), query_embedding))
+    df_res = df.sort_values(by="similarity", ascending=False).head(top_n)
+    return df_res 
 
 col1, col2 = st.sidebar.columns(2)
 # button = col1.button('Graph (Beta)')
@@ -186,8 +171,7 @@ if button == 'Graph':
     nodeColor= '#fff333'
     edgeColor= '#9999CC'
     if query != '':
-        idxs = [np.where(db['text_details'] == doc)[0][0] for doc in get_similar_docs(query, list(db['text_details']), 5)]
-        db = db.loc[idxs, :]
+        db = get_similar_docs(query, db, top_n=10)
     dic = graph(db)
     
     nodes, edges, config = dic['nodes'], dic['edges'], dic['config']
@@ -207,9 +191,7 @@ else:
     
     dfhat = db
     if query != '':
-        idxs = [np.where(dfhat['text_details'] == doc)[0][0] for doc in get_similar_docs(query, list(dfhat['text_details']), 15)]
-        print(idxs)
-        dfhat = dfhat.loc[idxs, :]
+        dfhat = get_similar_docs(query, dfhat, top_n=10)
     if query != '' or len(cols) != 0:    
     # dfhat = db.iloc[np.where(db[np.where(~db[p].isna()) for p in process].contains([1,2])) & np.where(db[augmentation].contains([1,2])) & np.where(db[module].contains([1,2])) & np.where(db[group].contains([1,2])) & np.where(db[sector].contains([1,2]))]
         for p in cols:

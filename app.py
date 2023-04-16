@@ -95,7 +95,7 @@ st.header('Supermind.design database output:')
 
 def get_similar_docs(query,df, top_n=5):
     query_embedding = get_embedding(query, engine=embedding_model )
-    df["similarity"] = df.embeddings.apply(lambda x: cosine_similarity(literal_eval(x), query_embedding))
+    df["similarity"] = df.embeddings.apply(lambda x: cosine_similarity(literal_eval(str(x)), query_embedding))
     df_res = df.sort_values(by="similarity", ascending=False).head(top_n)
     return df_res 
 

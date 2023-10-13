@@ -68,7 +68,6 @@ def clean_data():
     df['text_details'] = df['Case'] + ' ' + df['Description'] + ' ' + df['Use case'] + ' ' + df['Who / What']
     df['text_details'] = df['text_details'].apply(lambda x: x.lower())
     def lmda(x):
-        time.sleep(2)
         return get_embedding(x, engine=embedding_model)
     df['embeddings'] = df['text_details'].apply(lmda)
     return df
@@ -80,7 +79,6 @@ def get_data():
     db = pd.read_csv('data.csv')
     if len(db) == len(pd.read_csv("https://docs.google.com/spreadsheets/d/1RviBVCNh5FaYaNjoMAgCncRBHBFtfyt6XXaKO4f4Wek/edit?usp=sharing".replace('/edit?usp=sharing', '/export?format=csv&gid=0'), header=[1])):
         print('No change in data')
-        pass
     else:
         db = clean_data()
         db.to_csv('data.csv', index=False)

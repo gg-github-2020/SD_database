@@ -80,7 +80,7 @@ max_tokens = 2000  # the maximum for text-embedding-ada-002 is 8191
 def clean_data():
     sheet_url = "https://docs.google.com/spreadsheets/d/1RviBVCNh5FaYaNjoMAgCncRBHBFtfyt6XXaKO4f4Wek/edit?usp=sharing"
     url_1 = sheet_url.replace("/edit?usp=sharing", "/export?format=csv&gid=0")
-    df = pd.read_csv(url_1, header=[1])
+    df = pd.read_csv(url_1, header=[1], on_bad_lines="warn") 
 
     def apply_func(x):
         if re.search(r"\+{2}", str(x)) or re.search(r"\*{2}", str(x)):
@@ -126,13 +126,14 @@ def get_data():
     if not os.path.exists("data.csv"):
         db = clean_data()
         db.to_csv("data.csv", index=False)
-    db = pd.read_csv("data.csv")
+    db = pd.read_csv("data.csv", on_bad_lines="warn")
     if len(db) == len(
         pd.read_csv(
             "https://docs.google.com/spreadsheets/d/1RviBVCNh5FaYaNjoMAgCncRBHBFtfyt6XXaKO4f4Wek/edit?usp=sharing".replace(
                 "/edit?usp=sharing", "/export?format=csv&gid=0"
             ),
             header=[1],
+            on_bad_lines="warn"
         )
     ):
         print("No change in data")

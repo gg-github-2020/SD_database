@@ -17,7 +17,7 @@ from streamlit_agraph import agraph, Node, Edge, Config
 st.set_page_config(layout="wide", page_title="SuperMind Design")
 
 
-@st.cache(allow_output_mutation=True)
+@st.cache_data()
 def get_base64_of_bin_file(bin_file):
     with open(bin_file, "rb") as f:
         data = f.read()
@@ -76,7 +76,7 @@ max_tokens = 2000  # the maximum for text-embedding-ada-002 is 8191
 #     return ' '.join(stemmed_text)
 
 # st.sidebar.image('super.jpg',caption='Supermind Design',use_column_width=True)
-@st.cache(allow_output_mutation=True)
+@st.cache_data()
 def clean_data():
     sheet_url = "https://docs.google.com/spreadsheets/d/1RviBVCNh5FaYaNjoMAgCncRBHBFtfyt6XXaKO4f4Wek/edit?usp=sharing"
     url_1 = sheet_url.replace("/edit?usp=sharing", "/export?format=csv&gid=0")
@@ -207,7 +207,7 @@ cols = (
 )
 
 
-@st.cache(allow_output_mutation=True)
+@st.cache_data()
 def graph(db):
 
     nodes = []

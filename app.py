@@ -100,25 +100,63 @@ def load_data():
 
 
 # ---------------------------------------------------------------------------
-# Search index: pre-computed embeddings from the committed snapshot, keyed by
-# row identity so we can score live rows. Only used by the search box.
+# Search index. Base = pre-computed embeddings committed in data.csv. Any live
+# row NOT already in that base (i.e. rows you added to the sheet since the
+# snapshot) is embedded on the fly via OpenAI, in one batched call, and cached.
+# So semantic search always covers ALL current rows, and self-heals as you add
+# more -- no need to regenerate/commit the big embeddings file again.
 # ---------------------------------------------------------------------------
-@st.cache_data(show_spinner=False)
-def load_embedding_lookup():
+def _row_key(who, use):
+    return (str(who).strip() + "|" + str(use).strip()).lower()
+
+
+def _row_text(row):
+    """Rebuild the text an embedding is computed from, matching the original
+    snapshot recipe: active tag names + description + use case + who/what."""
+    case = " ".join(str(c) for c in names if row.get(c) in (1, 2))
+    parts = [case, str(row.get("Description", "")), str(row.get("Use case", "")),
+             str(row.get("Who / What", ""))]
+    return " ".join(p for p in parts if p and p != "nan").lower()
+
+
+@st.cache_resource(show_spinner=False)
+def base_embeddings():
     lut = {}
     try:
         snap = pd.read_csv("data.csv", on_bad_lines="skip")
         snap = _normalize_cols(snap)
         for _, r in snap.iterrows():
-            key = (str(r.get("Who / What", "")).strip() + "|"
-                   + str(r.get("Use case", "")).strip()).lower()
             try:
-                lut[key] = np.asarray(literal_eval(r["embeddings"]), dtype=np.float32)
+                lut[_row_key(r.get("Who / What", ""), r.get("Use case", ""))] = \
+                    np.asarray(literal_eval(r["embeddings"]), dtype=np.float32)
             except Exception:
                 pass
     except Exception:
         pass
     return lut
+
+
+@st.cache_resource(show_spinner="Indexing new rows for search…")
+def build_index(items):
+    """items: tuple of (key, text). Returns {key: embedding} using the committed
+    base where available and batch-embedding anything missing."""
+    base = base_embeddings()
+    index = {}
+    missing = []
+    for key, text in items:
+        if key in base:
+            index[key] = base[key]
+        else:
+            missing.append((key, text))
+    for i in range(0, len(missing), 100):
+        chunk = missing[i:i + 100]
+        resp = openai.Embedding.create(
+            input=[t.replace("\n", " ") or " " for _, t in chunk],
+            model=EMBEDDING_MODEL,
+        )
+        for (k, _), d in zip(chunk, resp["data"]):
+            index[k] = np.asarray(d["embedding"], dtype=np.float32)
+    return index
 
 
 def get_similar_docs(query, df, top_n=10):
@@ -132,17 +170,17 @@ def get_similar_docs(query, df, top_n=10):
         st.warning(f"Search is temporarily unavailable (OpenAI: {e}). "
                    "Browsing and filters below still work.")
         return df
-    lut = load_embedding_lookup()
-    if not lut:
-        return df
-    keys = (df["Who / What"].astype(str).str.strip() + "|"
-            + df["Use case"].astype(str).str.strip()).str.lower()
-    mask = keys.isin(lut.keys())
+    keys = df.apply(lambda r: _row_key(r["Who / What"], r["Use case"]), axis=1)
+    items = tuple(zip(keys.tolist(), df.apply(_row_text, axis=1).tolist()))
+    try:
+        index = build_index(items)
+    except Exception:
+        index = base_embeddings()  # new-row embedding failed; fall back to base
+    mask = keys.isin(index.keys())
     sub = df[mask].copy()
     if len(sub) == 0:
-        st.info("No pre-computed search index for these rows yet.")
         return df
-    mat = np.vstack([lut[k] for k in keys[mask]])
+    mat = np.vstack([index[k] for k in keys[mask]])
     sims = (mat @ q) / (np.linalg.norm(mat, axis=1) * np.linalg.norm(q) + 1e-9)
     sub["similarity"] = sims
     return sub.sort_values(by="similarity", ascending=False).head(top_n)

@@ -11,7 +11,8 @@ from streamlit_agraph import agraph, Node, Edge, Config
 
 # ---------------------------------------------------------------------------
 # OpenAI setup (fails gracefully so the whole app doesn't crash if the key is
-# missing/expired -- browsing/filtering still works, only search is disabled)
+# missing / expired / out of quota -- browsing and filtering still work,
+# only the semantic-search box is affected).
 # ---------------------------------------------------------------------------
 try:
     openai.api_key = st.secrets["api_key"]
@@ -39,8 +40,7 @@ names = [
 
 
 # ---------------------------------------------------------------------------
-# Helpers (local, so we avoid importing openai.embeddings_utils -- that module
-# drags in matplotlib/plotly/scikit-learn and badly slows the cold start)
+# Helpers
 # ---------------------------------------------------------------------------
 def _get_embedding(text):
     text = str(text).replace("\n", " ")
@@ -53,78 +53,104 @@ def _normalize_cols(df):
     return df
 
 
-# ---------------------------------------------------------------------------
-# Load the pre-computed database from disk ONCE and cache it.
-# The old code re-read this 34 MB file AND re-downloaded the whole Google
-# Sheet on every single rerun (every keystroke/filter click) -- that was the
-# main cause of the slowness.
-# ---------------------------------------------------------------------------
-@st.cache_data(show_spinner="Loading database…")
-def load_data():
-    db = pd.read_csv("data.csv", on_bad_lines="warn")
-    db = _normalize_cols(db)
-    if "embeddings" in db.columns:
-        db["embeddings"] = db["embeddings"].apply(
-            lambda s: np.asarray(literal_eval(s), dtype=np.float32)
-            if isinstance(s, str) else np.zeros(1, dtype=np.float32)
-        )
-    return db
+def _parse_plus(x):
+    """Map the sheet's '+'/'++' scoring into 1 / 2 / NaN."""
+    s = str(x)
+    if re.search(r"\+{2}", s) or re.search(r"\*{2}", s):
+        return 2
+    if re.search(r"^[^\+]*\+[^\+]*$", s):
+        return 1
+    return np.nan
 
 
-# Manual, opt-in rebuild from the Google Sheet (recomputes OpenAI embeddings).
-# This used to run automatically on every load and would hang/cost money.
-def rebuild_from_sheet():
-    df = pd.read_csv(SHEET_CSV_URL, header=[1], on_bad_lines="warn")
+TEXT_COLS = ["Who / What", "Use case", "Description"]
 
-    def apply_func(x):
-        if re.search(r"\+{2}", str(x)) or re.search(r"\*{2}", str(x)):
-            return 2
-        elif re.search(r"^[^\+]*\+[^\+]*$", str(x)):
-            return 1
-        return np.nan
 
-    for col in df.columns:
-        if col not in ["Who / What", "Use case", "Description"]:
-            df[col] = df[col].apply(apply_func)
+def _load_live_sheet():
+    """Read the live Google Sheet and parse the +/++ scoring columns.
+    Raises on any error or unexpected layout so callers can fall back."""
+    df = pd.read_csv(SHEET_CSV_URL, header=[1], on_bad_lines="skip")
     df = _normalize_cols(df)
-
-    df["Case"] = ""
-    for col in names:
-        if col in df.columns:
-            df["Case"] = df["Case"] + df[col].apply(
-                lambda x: str(col) + " " if x in [1, 2] else ""
-            )
-    df["text_details"] = (
-        df["Case"].fillna("") + " " + df["Description"].fillna("") + " "
-        + df["Use case"].fillna("") + " " + df["Who / What"].fillna("")
-    ).str.lower()
-    df["embeddings"] = df["text_details"].apply(_get_embedding)
-    df.to_csv("data.csv", index=False)
-    return df
+    for req in TEXT_COLS:
+        if req not in df.columns:
+            raise ValueError(f"Live sheet missing expected column: {req}")
+    for col in df.columns:
+        if col not in TEXT_COLS:
+            df[col] = df[col].apply(_parse_plus)
+    df = df.dropna(subset=["Who / What"])
+    df = df[df["Who / What"].astype(str).str.strip() != ""]
+    if len(df) == 0:
+        raise ValueError("Live sheet returned no rows")
+    return df.reset_index(drop=True)
 
 
 # ---------------------------------------------------------------------------
-# Semantic search -- vectorized cosine similarity against the pre-computed
-# embedding matrix (old code parsed every embedding string per row per query).
+# Display data: read the LIVE sheet (cached ~10 min) so all current rows show.
+# Falls back to the committed snapshot (data.csv) if the live read ever fails.
 # ---------------------------------------------------------------------------
+@st.cache_data(ttl=600, show_spinner="Loading database…")
+def load_data():
+    try:
+        return _load_live_sheet(), "live Google Sheet"
+    except Exception:
+        db = pd.read_csv("data.csv", on_bad_lines="skip")
+        db = _normalize_cols(db)
+        db = db.drop(columns=["Case", "text_details", "embeddings"], errors="ignore")
+        return db, "cached snapshot (data.csv)"
+
+
+# ---------------------------------------------------------------------------
+# Search index: pre-computed embeddings from the committed snapshot, keyed by
+# row identity so we can score live rows. Only used by the search box.
+# ---------------------------------------------------------------------------
+@st.cache_data(show_spinner=False)
+def load_embedding_lookup():
+    lut = {}
+    try:
+        snap = pd.read_csv("data.csv", on_bad_lines="skip")
+        snap = _normalize_cols(snap)
+        for _, r in snap.iterrows():
+            key = (str(r.get("Who / What", "")).strip() + "|"
+                   + str(r.get("Use case", "")).strip()).lower()
+            try:
+                lut[key] = np.asarray(literal_eval(r["embeddings"]), dtype=np.float32)
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return lut
+
+
 def get_similar_docs(query, df, top_n=10):
     if not OPENAI_OK:
-        st.warning("Search is unavailable: OpenAI API key is not configured in app secrets.")
+        st.warning("Search is unavailable: OpenAI API key is not configured in app secrets. "
+                   "Browsing and filters still work.")
         return df
     try:
         q = np.asarray(_get_embedding(query), dtype=np.float32)
     except Exception as e:
-        st.warning(f"Search failed (OpenAI): {e}")
+        st.warning(f"Search is temporarily unavailable (OpenAI: {e}). "
+                   "Browsing and filters below still work.")
         return df
-    mat = np.vstack(df["embeddings"].to_numpy())
+    lut = load_embedding_lookup()
+    if not lut:
+        return df
+    keys = (df["Who / What"].astype(str).str.strip() + "|"
+            + df["Use case"].astype(str).str.strip()).str.lower()
+    mask = keys.isin(lut.keys())
+    sub = df[mask].copy()
+    if len(sub) == 0:
+        st.info("No pre-computed search index for these rows yet.")
+        return df
+    mat = np.vstack([lut[k] for k in keys[mask]])
     sims = (mat @ q) / (np.linalg.norm(mat, axis=1) * np.linalg.norm(q) + 1e-9)
-    out = df.copy()
-    out["similarity"] = sims
-    return out.sort_values(by="similarity", ascending=False).head(top_n)
+    sub["similarity"] = sims
+    return sub.sort_values(by="similarity", ascending=False).head(top_n)
 
 
-db = load_data()
+db, data_source = load_data()
 st.header("Supermind.design database output:")
+st.caption(f"{len(db)} records · source: {data_source}")
 
 
 # ---------------------------------------------------------------------------
@@ -154,6 +180,7 @@ cols = (
     + [w if w != "Collaborate " else "Collaborate_" for w in augmentation]
     + module + group + sector
 )
+cols = [c for c in cols if c in db.columns]
 
 
 def graph(db, cols, node_color, edge_color):
@@ -203,13 +230,16 @@ if button == "Graph":
     gdb = db
     if query != "":
         gdb = get_similar_docs(query, gdb, top_n=10)
-    dic = graph(gdb, cols, node_color, edge_color)
-    nodes, edges, config = dic["nodes"], dic["edges"], dic["config"]
-    return_value = agraph(nodes=nodes, edges=edges, config=config)
-    if return_value:
-        db_fltr = gdb[gdb["Who / What"] == return_value].iloc[0]
-        with st.expander(db_fltr["Who / What"] + ": " + db_fltr["Use case"]):
-            st.write(db_fltr["Description"])
+    if len(cols) == 0:
+        st.info("Select one or more filters to build the graph.")
+    else:
+        dic = graph(gdb, cols, node_color, edge_color)
+        nodes, edges, config = dic["nodes"], dic["edges"], dic["config"]
+        return_value = agraph(nodes=nodes, edges=edges, config=config)
+        if return_value:
+            db_fltr = gdb[gdb["Who / What"] == return_value].iloc[0]
+            with st.expander(db_fltr["Who / What"] + ": " + str(db_fltr["Use case"])):
+                st.write(db_fltr["Description"])
 
 else:
     dfhat = db.copy()
@@ -219,12 +249,12 @@ else:
         for p in cols:
             dfhat[p] = pd.to_numeric(dfhat[p], errors="coerce")
             dfhat = dfhat[dfhat[p].isin([1, 2])]
-        if query == "":
+        if query == "" and cols:
             dfhat = dfhat.sort_values(by=cols, ascending=False)
         if len(dfhat) == 0:
             st.write("No data found")
         for row in dfhat.iterrows():
-            with st.expander(row[1]["Who / What"] + ": " + row[1]["Use case"]):
+            with st.expander(str(row[1]["Who / What"]) + ": " + str(row[1]["Use case"])):
                 if cols:
                     st.markdown(
                         ", ".join(
@@ -244,23 +274,3 @@ else:
         st.sidebar.write(
             "Copyright © Supermind.design Creative Commons (share, adapt, credit) license"
         )
-
-
-# ---------------------------------------------------------------------------
-# Optional: manual rebuild of the local database from the live Google Sheet.
-# (Note: on Streamlit Community Cloud the filesystem is ephemeral, so a rebuild
-#  lasts for the running session; commit a fresh data.csv for a permanent update.)
-# ---------------------------------------------------------------------------
-st.sidebar.write("---")
-if st.sidebar.button("🔄 Rebuild data from Google Sheet"):
-    if not OPENAI_OK:
-        st.sidebar.error("Can't rebuild: OpenAI API key not configured in app secrets.")
-    else:
-        try:
-            with st.spinner("Rebuilding embeddings from the Google Sheet… this can take a minute."):
-                rebuild_from_sheet()
-            load_data.clear()
-            st.sidebar.success("Rebuilt from the sheet. Reloading…")
-            st.rerun()
-        except Exception as e:
-            st.sidebar.error(f"Rebuild failed: {e}")
